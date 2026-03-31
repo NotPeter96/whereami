@@ -1,0 +1,37 @@
+#!/bin/bash
+# Prints the public IP address and geolocation (country, region/state, city)
+
+set -o pipefail
+
+IP=$(curl -fsS https://api.ipify.org || true)
+
+if [ -z "$IP" ]; then
+	echo "Public IP Address: (unable to determine)"
+	exit 1
+fi
+
+echo "Public IP Address: $IP"
+
+# Try primary geolocation provider (ipapi.co)
+GEO=$(curl -fsS https://ipapi.co/${IP}/json/ 2>/dev/null || true)
+
+parse_field() {
+	local json="$1" key="$2"
+	echo "$json" | sed -n "s/.*\"${key}\":\s*\"\([^\"]*\)\".*/\1/p"
+}
+
+if [ -n "$GEO" ] && ! echo "$GEO" | grep -q '"error"'; then
+	CITY=$(parse_field "$GEO" city)
+	REGION=$(parse_field "$GEO" region)
+	COUNTRY=$(parse_field "$GEO" country_name)
+else
+	# Fallback to ip-api.com which uses different field names
+	GEO=$(curl -fsS http://ip-api.com/json/${IP} 2>/dev/null || true)
+	CITY=$(parse_field "$GEO" city)
+	REGION=$(parse_field "$GEO" regionName)
+	COUNTRY=$(parse_field "$GEO" country)
+fi
+
+[ -n "$COUNTRY" ] && echo "Country: $COUNTRY"
+[ -n "$REGION" ] && echo "Region/State: $REGION"
+[ -n "$CITY" ] && echo "City: $CITY"
